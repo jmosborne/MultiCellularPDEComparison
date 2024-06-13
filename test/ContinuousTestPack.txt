@@ -1,1 +1,1 @@
-TestElipticalPdeComparison.hpp
+TestEllipticPdeComparison.hpp
