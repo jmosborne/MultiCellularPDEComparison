@@ -5,7 +5,7 @@ global R;
 
 %Poisson's Equation on Unit Disk
 C0=1;
-R=1; %% Can only do this currently
+R=5; %% Can only do this currently
 k=1;
 
 
