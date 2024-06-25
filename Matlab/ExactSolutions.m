@@ -6,7 +6,7 @@ global R;
 %Poisson's Equation on Unit Disk
 C0=1;
 R=5; %% Can only do this currently
-k=1;
+k=0.1;
 
 
 %Create the PDE model and include the geometry.
@@ -79,7 +79,7 @@ mesh = model.Mesh;
 p = mesh.Nodes;
 u = results.NodalSolution;
 r=sqrt(p(1,:).^2 + p(2,:).^2);
-exact = C0*besseli(0,r)/besseli(0,R);
+exact = C0*besseli(0,r*sqrt(k))/besseli(0,R*sqrt(k));
 
 figure
 pdeplot(model,"XYData",u - exact')
