@@ -50,7 +50,6 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "UniformSourceEllipticPde.hpp"
 #include "CellwiseSourceEllipticPde.hpp"
 #include "AveragedSourceEllipticPde.hpp"
-#include "VolumeDependentAveragedSourceEllipticPde.hpp"
 #include "VolumeTrackingModifier.hpp"
 #include "FixedG1GenerationalCellCycleModel.hpp"
 #include "ApoptoticCellProperty.hpp"
@@ -78,7 +77,11 @@ static const double M_TISSUE_RADIUS = 5;
 static const double M_APOPTOTIC_RADIUS = 2;
 static const double M_BOX_HALF_WIDTH = 6; 
 static const double M_BOX_H = 0.1;
-static const double M_CELL_UPTAKE = -0.1; 
+static const double M_CONSTANT_UPTAKE = -0.1; 
+static const double M_LINEAR_UPTAKE = -0.1; 
+static const double M_DIFFUSION_COEFICIENT = 0.5; 
+
+
 static const double M_BOUNDARY_CONDITION = 1;
 
  
@@ -111,59 +114,73 @@ private:
 
     void MakeApoptoicRegion(AbstractCellPopulation<2>& rCellPopulation)
     {
-        MAKE_PTR(ApoptoticCellProperty, p_apoptotic_state);
-        for (AbstractCellPopulation<2>::Iterator cell_iter = rCellPopulation.Begin();
-                cell_iter != rCellPopulation.End();
-                ++cell_iter)
-        {
-            c_vector<double,2>  cell_location = rCellPopulation.GetLocationOfCellCentre(*cell_iter);
-            double radius = norm_2(cell_location);
+        // MAKE_PTR(ApoptoticCellProperty, p_apoptotic_state);
+        // for (AbstractCellPopulation<2>::Iterator cell_iter = rCellPopulation.Begin();
+        //         cell_iter != rCellPopulation.End();
+        //         ++cell_iter)
+        // {
+        //     c_vector<double,2>  cell_location = rCellPopulation.GetLocationOfCellCentre(*cell_iter);
+        //     double radius = norm_2(cell_location);
             
-            if (radius<M_APOPTOTIC_RADIUS)
-            {
-                cell_iter->AddCellProperty(p_apoptotic_state);
-            }
-        }
+        //     if (radius<M_APOPTOTIC_RADIUS)
+        //     {
+        //         cell_iter->AddCellProperty(p_apoptotic_state);
+        //     }
+        // }
     }
 
 public:
     /* 
      * First test the solutions are the same (and match the analytic solution) for Uniform uptake (i.e only constant linear term)
+     *
+     * Grad.(Grad u) + k = 0;
+     * 
      */
-
     void TestEllipticGrowingDomainUniformPde()
     {
-        // Circular Mesh
+        // // Circular Mesh
+        // TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
+        // TetrahedralMesh<2,2> temp_mesh;
+        // temp_mesh.ConstructFromMeshReader(mesh_reader);
+        // temp_mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
+
+        // NodesOnlyMesh<2> mesh;
+        // mesh.ConstructNodesWithoutMesh(temp_mesh, 1.5);
+
+        // std::vector<CellPtr> cells;
+        // GenerateCells(mesh.GetNumNodes(),cells,1.0);
+
+        // NodeBasedCellPopulation<2> cell_population(mesh, cells);
+        // cell_population.AddCellWriter<CellIdWriter>();
+        // cell_population.AddCellWriter<CellMutationStatesWriter>();
+
         TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-        TetrahedralMesh<2,2> temp_mesh;
-        temp_mesh.ConstructFromMeshReader(mesh_reader);
-        temp_mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
-
-        NodesOnlyMesh<2> mesh;
-        mesh.ConstructNodesWithoutMesh(temp_mesh, 1.5);
-
+        MutableMesh<2,2> mesh;
+        mesh.ConstructFromMeshReader(mesh_reader);
+        mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
         std::vector<CellPtr> cells;
         GenerateCells(mesh.GetNumNodes(),cells,1.0);
+        MeshBasedCellPopulation<2> cell_population(mesh, cells);
 
-        NodeBasedCellPopulation<2> cell_population(mesh, cells);
         cell_population.AddCellWriter<CellIdWriter>();
         cell_population.AddCellWriter<CellMutationStatesWriter>();
+        cell_population.SetWriteVtkAsPoints(true);
+        cell_population.AddPopulationWriter<VoronoiDataWriter>();
+
+        // bound poulation so finite areas for cell scaling
+        cell_population.SetBoundVoronoiTessellation(true);
 
         // Make apoptotic region
         MakeApoptoicRegion(cell_population);
 
         OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("TestEllipticGrowingDomainUniformPde");
+        simulator.SetOutputDirectory("Elliptic/CircleConstantUptake/GrowingDomain/UniformPde");
         simulator.SetDt(1.0);
         simulator.SetSamplingTimestepMultiple(1.0);
         simulator.SetEndTime(M_TIME_FOR_SIMULATION);
 
-        //MAKE_PTR(RepulsionForce<2>, p_force);
-        //simulator.AddForce(p_force);
-
         // Create PDE and boundary condition objects
-        //MAKE_PTR_ARGS(CellwiseSourceEllipticPde<2>, p_pde, (cell_population, M_CELL_UPTAKE));
-        MAKE_PTR_ARGS(UniformSourceEllipticPde<2>, p_pde, (0.0, M_CELL_UPTAKE));
+        MAKE_PTR_ARGS(UniformSourceEllipticPde<2>, p_pde, (M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT));
         MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
 
         // Create a PDE modifier and set the name of the dependent variable in the PDE
@@ -199,37 +216,33 @@ public:
 
     void TestEllipticBoxDomainUniformPde()
     {
-        // Circular Mesh
         TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-        TetrahedralMesh<2,2> temp_mesh;
-        temp_mesh.ConstructFromMeshReader(mesh_reader);
-        temp_mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
-
-        NodesOnlyMesh<2> mesh;
-        mesh.ConstructNodesWithoutMesh(temp_mesh, 1.5);
-
+        MutableMesh<2,2> mesh;
+        mesh.ConstructFromMeshReader(mesh_reader);
+        mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
         std::vector<CellPtr> cells;
         GenerateCells(mesh.GetNumNodes(),cells,1.0);
+        MeshBasedCellPopulation<2> cell_population(mesh, cells);
 
-        NodeBasedCellPopulation<2> cell_population(mesh, cells);
         cell_population.AddCellWriter<CellIdWriter>();
         cell_population.AddCellWriter<CellMutationStatesWriter>();
+        cell_population.SetWriteVtkAsPoints(true);
+        cell_population.AddPopulationWriter<VoronoiDataWriter>();
+
+        // bound poulation so finite areas for cell scaling
+        cell_population.SetBoundVoronoiTessellation(true);
 
         // Make apoptotic region
         MakeApoptoicRegion(cell_population);
 
         OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("TestEllipticBoxDomainUniformPde");
+        simulator.SetOutputDirectory("Elliptic/CircleConstantUptake/BoxDomain/UniformPde");
         simulator.SetDt(1.0);
         simulator.SetSamplingTimestepMultiple(1);
         simulator.SetEndTime(M_TIME_FOR_SIMULATION);
 
-        //MAKE_PTR(RepulsionForce<2>, p_force);
-        //simulator.AddForce(p_force);
-
         // Create PDE and boundary condition objects
-        MAKE_PTR_ARGS(UniformSourceEllipticPde<2>, p_pde, (0.0, M_CELL_UPTAKE));
-        //MAKE_PTR_ARGS(AveragedSourceEllipticPde<2>, p_pde, (cell_population, M_CELL_UPTAKE));
+        MAKE_PTR_ARGS(UniformSourceEllipticPde<2>, p_pde, (M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT));
         MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
 
         // Create a ChasteCuboid on which to base the finite element mesh used to solve the PDE
@@ -243,6 +256,7 @@ public:
         
         // Set the BSC on the elements that don't contain Cells.
         p_pde_modifier->SetBcsOnBoxBoundary(false);
+        p_pde_modifier->SetBcsOnBoundingSphere(true);
 
         simulator.AddSimulationModifier(p_pde_modifier);
 
@@ -278,37 +292,34 @@ public:
 
     void TestEllipticGrowingDomainCellwisePde()
     {
-        // Circular Mesh
         TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-        TetrahedralMesh<2,2> temp_mesh;
-        temp_mesh.ConstructFromMeshReader(mesh_reader);
-        temp_mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
-
-        NodesOnlyMesh<2> mesh;
-        mesh.ConstructNodesWithoutMesh(temp_mesh, 1.5);
-
+        MutableMesh<2,2> mesh;
+        mesh.ConstructFromMeshReader(mesh_reader);
+        mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
         std::vector<CellPtr> cells;
         GenerateCells(mesh.GetNumNodes(),cells,1.0);
+        MeshBasedCellPopulation<2> cell_population(mesh, cells);
 
-        NodeBasedCellPopulation<2> cell_population(mesh, cells);
         cell_population.AddCellWriter<CellIdWriter>();
         cell_population.AddCellWriter<CellMutationStatesWriter>();
+        cell_population.SetWriteVtkAsPoints(true);
+        cell_population.AddPopulationWriter<VoronoiDataWriter>();
+
+        // bound poulation so finite areas for cell scaling
+        cell_population.SetBoundVoronoiTessellation(true);
 
         // Make apoptotic region
         MakeApoptoicRegion(cell_population);
 
         OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("TestEllipticGrowingDomainCellwisePde");
+        simulator.SetOutputDirectory("Elliptic/CircleConstantUptake/GrowingDomain/CellwisePde");
         simulator.SetDt(1.0);
         simulator.SetSamplingTimestepMultiple(1.0);
         simulator.SetEndTime(M_TIME_FOR_SIMULATION);
 
-        //MAKE_PTR(RepulsionForce<2>, p_force);
-        //simulator.AddForce(p_force);
-
         // Create PDE and boundary condition objects
         bool is_volume_scaled = false;
-        MAKE_PTR_ARGS(CellwiseSourceEllipticPde<2>, p_pde, (cell_population, 0.0, M_CELL_UPTAKE, is_volume_scaled));
+        MAKE_PTR_ARGS(CellwiseSourceEllipticPde<2>, p_pde, (cell_population, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
         MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
 
         // Create a PDE modifier and set the name of the dependent variable in the PDE
@@ -344,18 +355,6 @@ public:
 
     void TestEllipticGrowingDomainVolumeDependentCellwisePde()
     {
-        // // Circular Mesh
-        // TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-        // TetrahedralMesh<2,2> temp_mesh;
-        // temp_mesh.ConstructFromMeshReader(mesh_reader);
-        // temp_mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
-
-        // NodesOnlyMesh<2> mesh;
-        // mesh.ConstructNodesWithoutMesh(temp_mesh, 1.5);
-
-        // std::vector<CellPtr> cells;
-        // GenerateCells(mesh.GetNumNodes(),cells,1.0);
-
         TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
         MutableMesh<2,2> mesh;
         mesh.ConstructFromMeshReader(mesh_reader);
@@ -376,17 +375,14 @@ public:
         MakeApoptoicRegion(cell_population);
 
         OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("TestEllipticGrowingDomainVolumeDependentCellwisePde");
+        simulator.SetOutputDirectory("Elliptic/CircleConstantUptake/GrowingDomain/VolumeScaledCellwisePde");
         simulator.SetDt(1.0);
         simulator.SetSamplingTimestepMultiple(1.0);
         simulator.SetEndTime(M_TIME_FOR_SIMULATION);
 
-        //MAKE_PTR(RepulsionForce<2>, p_force);
-        //simulator.AddForce(p_force);
-
         // Create PDE and boundary condition objects
         bool is_volume_scaled = true;
-        MAKE_PTR_ARGS(CellwiseSourceEllipticPde<2>, p_pde, (cell_population, 0.0, M_CELL_UPTAKE, is_volume_scaled));
+        MAKE_PTR_ARGS(CellwiseSourceEllipticPde<2>, p_pde, (cell_population, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
         MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
 
         // Create a PDE modifier and set the name of the dependent variable in the PDE
@@ -423,20 +419,7 @@ public:
 
     void TestEllipticBoxDomainAveragedPde()
     {
-        // // Circular Mesh
-        // TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-        // TetrahedralMesh<2,2> temp_mesh;
-        // temp_mesh.ConstructFromMeshReader(mesh_reader);
-        // temp_mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
-
-        // NodesOnlyMesh<2> mesh;
-        // mesh.ConstructNodesWithoutMesh(temp_mesh, 1.5);
-
-        // std::vector<CellPtr> cells;
-        // GenerateCells(mesh.GetNumNodes(),cells,1.0);
-
-        // NodeBasedCellPopulation<2> cell_population(mesh, cells);
-
+        // Circular Mesh
         TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
         MutableMesh<2,2> mesh;
         mesh.ConstructFromMeshReader(mesh_reader);
@@ -454,16 +437,14 @@ public:
         MakeApoptoicRegion(cell_population);
 
         OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("TestEllipticBoxDomainAveragedPde");
+        simulator.SetOutputDirectory("Elliptic/CircleConstantUptake/BoxDomain/AveragedPde");
         simulator.SetDt(1.0);
         simulator.SetSamplingTimestepMultiple(1);
         simulator.SetEndTime(M_TIME_FOR_SIMULATION);
 
-        //MAKE_PTR(RepulsionForce<2>, p_force);
-        //simulator.AddForce(p_force);
-
         // Create PDE and boundary condition objects
-        MAKE_PTR_ARGS(AveragedSourceEllipticPde<2>, p_pde, (cell_population, M_CELL_UPTAKE));
+        bool is_volume_scaled = false;
+        MAKE_PTR_ARGS(AveragedSourceEllipticPde<2>, p_pde, (cell_population, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
         MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
 
         // Create a ChasteCuboid on which to base the finite element mesh used to solve the PDE
@@ -477,6 +458,7 @@ public:
         
         // Set the BSC on the elements that don't contain Cells.
         p_pde_modifier->SetBcsOnBoxBoundary(false);
+        p_pde_modifier->SetBcsOnBoundingSphere(true);
 
         simulator.AddSimulationModifier(p_pde_modifier);
 
@@ -508,20 +490,7 @@ public:
 
 void TestEllipticBoxDomainVolumeDependentAveragedPde()
     {
-        // // Circular Mesh
-        // TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-        // TetrahedralMesh<2,2> temp_mesh;
-        // temp_mesh.ConstructFromMeshReader(mesh_reader);
-        // temp_mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
-
-        // NodesOnlyMesh<2> mesh;
-        // mesh.ConstructNodesWithoutMesh(temp_mesh, 1.5);
-
-        // std::vector<CellPtr> cells;
-        // GenerateCells(mesh.GetNumNodes(),cells,1.0);
-
-        // NodeBasedCellPopulation<2> cell_population(mesh, cells);
-
+        // Circular Mesh
         TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
         MutableMesh<2,2> mesh;
         mesh.ConstructFromMeshReader(mesh_reader);
@@ -542,16 +511,14 @@ void TestEllipticBoxDomainVolumeDependentAveragedPde()
         cell_population.SetBoundVoronoiTessellation(true);
 
         OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("TestEllipticBoxDomainVolumeDependentAveragedPde");
+        simulator.SetOutputDirectory("Elliptic/CircleConstantUptake/BoxDomain/VolumeScaledAveragedPde");
         simulator.SetDt(1.0);
         simulator.SetSamplingTimestepMultiple(1);
         simulator.SetEndTime(M_TIME_FOR_SIMULATION);
 
-        //MAKE_PTR(RepulsionForce<2>, p_force);
-        //simulator.AddForce(p_force);
-
         // Create PDE and boundary condition objects
-        MAKE_PTR_ARGS(VolumeDependentAveragedSourceEllipticPde<2>, p_pde, (cell_population, M_CELL_UPTAKE));
+        bool is_volume_scaled = false;
+        MAKE_PTR_ARGS(AveragedSourceEllipticPde<2>, p_pde, (cell_population, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
         MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
 
         // Create a ChasteCuboid on which to base the finite element mesh used to solve the PDE
@@ -565,6 +532,7 @@ void TestEllipticBoxDomainVolumeDependentAveragedPde()
         
         // Set the BSC on the elements that don't contain Cells.
         p_pde_modifier->SetBcsOnBoxBoundary(false);
+        p_pde_modifier->SetBcsOnBoundingSphere(true);
 
         simulator.AddSimulationModifier(p_pde_modifier);
 
