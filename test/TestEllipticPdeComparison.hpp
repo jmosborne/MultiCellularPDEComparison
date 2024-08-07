@@ -66,6 +66,7 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "HoneycombVertexMeshGenerator.hpp"
 #include "NagaiHondaForce.hpp"
 #include "SimpleTargetAreaModifier.hpp"
+#include "Debug.hpp"
 
 // This test is always run sequentially (never in parallel)
 #include "FakePetscSetup.hpp"
@@ -77,9 +78,9 @@ static const double M_TISSUE_RADIUS = 5;
 static const double M_APOPTOTIC_RADIUS = 2;
 static const double M_BOX_HALF_WIDTH = 6; 
 static const double M_BOX_H = 0.1;
-static const double M_CONSTANT_UPTAKE = -0.1; 
+static const double M_CONSTANT_UPTAKE = 0.0; 
 static const double M_LINEAR_UPTAKE = -0.1; 
-static const double M_DIFFUSION_COEFICIENT = 0.5; 
+static const double M_DIFFUSION_COEFICIENT = 1.0; 
 
 
 static const double M_BOUNDARY_CONDITION = 1;
@@ -114,455 +115,283 @@ private:
 
     void MakeApoptoicRegion(AbstractCellPopulation<2>& rCellPopulation)
     {
-        // MAKE_PTR(ApoptoticCellProperty, p_apoptotic_state);
-        // for (AbstractCellPopulation<2>::Iterator cell_iter = rCellPopulation.Begin();
-        //         cell_iter != rCellPopulation.End();
-        //         ++cell_iter)
-        // {
-        //     c_vector<double,2>  cell_location = rCellPopulation.GetLocationOfCellCentre(*cell_iter);
-        //     double radius = norm_2(cell_location);
+        MAKE_PTR(ApoptoticCellProperty, p_apoptotic_state);
+        for (AbstractCellPopulation<2>::Iterator cell_iter = rCellPopulation.Begin();
+                cell_iter != rCellPopulation.End();
+                ++cell_iter)
+        {
+            c_vector<double,2>  cell_location = rCellPopulation.GetLocationOfCellCentre(*cell_iter);
+            double radius = norm_2(cell_location);
             
-        //     if (radius<M_APOPTOTIC_RADIUS)
-        //     {
-        //         cell_iter->AddCellProperty(p_apoptotic_state);
-        //     }
-        // }
+            if (radius<M_APOPTOTIC_RADIUS)
+            {
+                cell_iter->AddCellProperty(p_apoptotic_state);
+            }
+        }
+    }
+
+    boost::shared_ptr<AbstractLinearPde<2,2> > MakePde(AbstractCellPopulation<2>& rCellPopulation, unsigned pde_type)
+    {
+        boost::shared_ptr<AbstractLinearPde<2,2> > p_pde = boost::shared_ptr<AbstractLinearPde<2,2> >();
+
+        if (pde_type == 0 || pde_type == 3)
+        {
+            ASSIGN_PTR(p_pde, UniformSourceEllipticPde<2>, (M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT));
+        }
+        else if (pde_type == 1)
+        {
+            bool is_volume_scaled = false;
+            ASSIGN_PTR(p_pde, CellwiseSourceEllipticPde<2>, (rCellPopulation, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
+        }
+        else if (pde_type == 2)
+        {
+            bool is_volume_scaled = true;
+            ASSIGN_PTR(p_pde, CellwiseSourceEllipticPde<2>, (rCellPopulation, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
+        }
+        else if (pde_type == 4)
+        {
+            bool is_volume_scaled = false;
+            ASSIGN_PTR(p_pde, AveragedSourceEllipticPde<2>, (rCellPopulation, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));       
+        }
+        else
+        {
+            assert(pde_type == 5);
+            bool is_volume_scaled = true;
+            ASSIGN_PTR(p_pde, AveragedSourceEllipticPde<2>, (rCellPopulation, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
+        }
+
+        return p_pde;
     }
 
 public:
     /* 
      * First test the solutions are the same (and match the analytic solution) for Uniform uptake (i.e only constant linear term)
      *
-     * Grad.(Grad u) + k = 0;
+     * D Grad.(Grad u) + au + b = 0; 
+     * D=1.0, a=-0.1, b=0.0
      * 
      */
-    void TestEllipticGrowingDomainUniformPde()
+    void TestEllipticPdes()
     {
-        // // Circular Mesh
-        // TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-        // TetrahedralMesh<2,2> temp_mesh;
-        // temp_mesh.ConstructFromMeshReader(mesh_reader);
-        // temp_mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
+        std::string output_dir[6] = {"Elliptic/CircleConstantUptake/GrowingDomain/UniformPde",
+                                     "Elliptic/CircleConstantUptake/GrowingDomain/CellwisePde",
+                                     "Elliptic/CircleConstantUptake/GrowingDomain/VolumeScaledCellwisePde",
+                                     "Elliptic/CircleConstantUptake/BoxDomain/UniformPde",
+                                     "Elliptic/CircleConstantUptake/BoxDomain/AveragedPde",
+                                     "Elliptic/CircleConstantUptake/BoxDomain/VolumeScaledAveragedPde"};
 
-        // NodesOnlyMesh<2> mesh;
-        // mesh.ConstructNodesWithoutMesh(temp_mesh, 1.5);
-
-        // std::vector<CellPtr> cells;
-        // GenerateCells(mesh.GetNumNodes(),cells,1.0);
-
-        // NodeBasedCellPopulation<2> cell_population(mesh, cells);
-        // cell_population.AddCellWriter<CellIdWriter>();
-        // cell_population.AddCellWriter<CellMutationStatesWriter>();
-
-        TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-        MutableMesh<2,2> mesh;
-        mesh.ConstructFromMeshReader(mesh_reader);
-        mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
-        std::vector<CellPtr> cells;
-        GenerateCells(mesh.GetNumNodes(),cells,1.0);
-        MeshBasedCellPopulation<2> cell_population(mesh, cells);
-
-        cell_population.AddCellWriter<CellIdWriter>();
-        cell_population.AddCellWriter<CellMutationStatesWriter>();
-        cell_population.SetWriteVtkAsPoints(true);
-        cell_population.AddPopulationWriter<VoronoiDataWriter>();
-
-        // bound poulation so finite areas for cell scaling
-        cell_population.SetBoundVoronoiTessellation(true);
-
-        // Make apoptotic region
-        MakeApoptoicRegion(cell_population);
-
-        OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("Elliptic/CircleConstantUptake/GrowingDomain/UniformPde");
-        simulator.SetDt(1.0);
-        simulator.SetSamplingTimestepMultiple(1.0);
-        simulator.SetEndTime(M_TIME_FOR_SIMULATION);
-
-        // Create PDE and boundary condition objects
-        MAKE_PTR_ARGS(UniformSourceEllipticPde<2>, p_pde, (M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT));
-        MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
-
-        // Create a PDE modifier and set the name of the dependent variable in the PDE
-        MAKE_PTR_ARGS(EllipticGrowingDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false));
-        p_pde_modifier->SetDependentVariableName("oxygen");
-        simulator.AddSimulationModifier(p_pde_modifier);
-
-        // Add data writer to output oxygen to a file for simple comparison
-        boost::shared_ptr<CellDataItemWriter<2,2> > p_cell_data_item_writer(new CellDataItemWriter<2,2>("oxygen"));
-        cell_population.AddCellWriter(p_cell_data_item_writer);
-
-        simulator.Solve();
-
-        // Test some simulation statistics
-        TS_ASSERT_EQUALS(simulator.rGetCellPopulation().GetNumAllCells(), 312u); // No birth yet
-
-        // Test against analytic solution .... From Bessels functions  
-        for (AbstractCellPopulation<2>::Iterator cell_iter = simulator.rGetCellPopulation().Begin();
-                cell_iter != simulator.rGetCellPopulation().End();
-                ++cell_iter)
+        for (unsigned pde_type = 0; pde_type != 6; pde_type++)
         {
-            c_vector<double,2>  cell_location = simulator.rGetCellPopulation().GetLocationOfCellCentre(*cell_iter);
-            double radius = norm_2(cell_location);
-            //double exact_solution = M_BOUNDARY_CONDITION + M_CELL_UPTAKE * 0.25 * (M_TISSUE_RADIUS * M_TISSUE_RADIUS - radius * radius);
+            PRINT_VARIABLE(output_dir[pde_type]);
 
-            if (radius<0.001)
+            TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
+            MutableMesh<2,2> mesh;
+            mesh.ConstructFromMeshReader(mesh_reader);
+            mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
+            std::vector<CellPtr> cells;
+            GenerateCells(mesh.GetNumNodes(),cells,1.0);
+            MeshBasedCellPopulation<2> cell_population(mesh, cells);
+
+            cell_population.AddCellWriter<CellIdWriter>();
+            cell_population.AddCellWriter<CellMutationStatesWriter>();
+            cell_population.SetWriteVtkAsPoints(true);
+            cell_population.AddPopulationWriter<VoronoiDataWriter>();
+
+            // bound poulation so finite areas for cell scaling
+            cell_population.SetBoundVoronoiTessellation(true);
+
+            OffLatticeSimulation<2> simulator(cell_population);
+            simulator.SetOutputDirectory(output_dir[pde_type]);
+            simulator.SetDt(1.0);
+            simulator.SetSamplingTimestepMultiple(1.0);
+            simulator.SetEndTime(M_TIME_FOR_SIMULATION);
+
+            // Create PDE 
+            boost::shared_ptr<AbstractLinearPde<2,2> > p_pde = MakePde(cell_population, pde_type);
+
+            // create boundary condition
+            MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
+  
+
+            // Create a PDE modifier and set the name of the dependent variable in the PDE
+            if (pde_type <3) //Growing Domain
             {
-                double oxygen = cell_iter->GetCellData()->GetItem("oxygen");
-                TS_ASSERT_DELTA(oxygen, 0.036710892271287, 1e-2);
+                MAKE_PTR_ARGS(EllipticGrowingDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false));
+                p_pde_modifier->SetDependentVariableName("oxygen");
+                simulator.AddSimulationModifier(p_pde_modifier);
             }
-        }
-    }
-
-    void TestEllipticBoxDomainUniformPde()
-    {
-        TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-        MutableMesh<2,2> mesh;
-        mesh.ConstructFromMeshReader(mesh_reader);
-        mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
-        std::vector<CellPtr> cells;
-        GenerateCells(mesh.GetNumNodes(),cells,1.0);
-        MeshBasedCellPopulation<2> cell_population(mesh, cells);
-
-        cell_population.AddCellWriter<CellIdWriter>();
-        cell_population.AddCellWriter<CellMutationStatesWriter>();
-        cell_population.SetWriteVtkAsPoints(true);
-        cell_population.AddPopulationWriter<VoronoiDataWriter>();
-
-        // bound poulation so finite areas for cell scaling
-        cell_population.SetBoundVoronoiTessellation(true);
-
-        // Make apoptotic region
-        MakeApoptoicRegion(cell_population);
-
-        OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("Elliptic/CircleConstantUptake/BoxDomain/UniformPde");
-        simulator.SetDt(1.0);
-        simulator.SetSamplingTimestepMultiple(1);
-        simulator.SetEndTime(M_TIME_FOR_SIMULATION);
-
-        // Create PDE and boundary condition objects
-        MAKE_PTR_ARGS(UniformSourceEllipticPde<2>, p_pde, (M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT));
-        MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
-
-        // Create a ChasteCuboid on which to base the finite element mesh used to solve the PDE
-        ChastePoint<2> lower(-M_BOX_HALF_WIDTH, -M_BOX_HALF_WIDTH);
-        ChastePoint<2> upper(M_BOX_HALF_WIDTH, M_BOX_HALF_WIDTH);
-        MAKE_PTR_ARGS(ChasteCuboid<2>, p_cuboid, (lower, upper));
-
-        // Create a PDE modifier and set the name of the dependent variable in the PDE
-        MAKE_PTR_ARGS(EllipticBoxDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false, p_cuboid, M_BOX_H));
-        p_pde_modifier->SetDependentVariableName("oxygen");
-        
-        // Set the BSC on the elements that don't contain Cells.
-        p_pde_modifier->SetBcsOnBoxBoundary(false);
-        p_pde_modifier->SetBcsOnBoundingSphere(true);
-
-        simulator.AddSimulationModifier(p_pde_modifier);
-
-        // Add data writer to output oxygen to a file for simple comparison
-        boost::shared_ptr<CellDataItemWriter<2,2> > p_cell_data_item_writer(new CellDataItemWriter<2,2>("oxygen"));
-        cell_population.AddCellWriter(p_cell_data_item_writer);
-
-        simulator.Solve();
-
-        // Test some simulation statistics
-        TS_ASSERT_EQUALS(simulator.rGetCellPopulation().GetNumAllCells(), 312u); // No birth yet
-
-        // Test against analytic solution .... From Bessels functions  
-        for (AbstractCellPopulation<2>::Iterator cell_iter = simulator.rGetCellPopulation().Begin();
-                cell_iter != simulator.rGetCellPopulation().End();
-                ++cell_iter)
-        {
-            c_vector<double,2>  cell_location = simulator.rGetCellPopulation().GetLocationOfCellCentre(*cell_iter);
-            double radius = norm_2(cell_location);
-            //double exact_solution = M_BOUNDARY_CONDITION + M_CELL_UPTAKE * 0.25 * (M_TISSUE_RADIUS * M_TISSUE_RADIUS - radius * radius);
-
-            if (radius<0.001)
+            else // Box domain
             {
-                double oxygen = cell_iter->GetCellData()->GetItem("oxygen");
-                TS_ASSERT_DELTA(oxygen, 0.036710892271287, 1e-2);
+                // Create a ChasteCuboid on which to base the finite element mesh used to solve the PDE
+                ChastePoint<2> lower(-M_BOX_HALF_WIDTH, -M_BOX_HALF_WIDTH);
+                ChastePoint<2> upper(M_BOX_HALF_WIDTH, M_BOX_HALF_WIDTH);
+                MAKE_PTR_ARGS(ChasteCuboid<2>, p_cuboid, (lower, upper));
+
+                // Create a PDE modifier and set the name of the dependent variable in the PDE
+                MAKE_PTR_ARGS(EllipticBoxDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false, p_cuboid, M_BOX_H));
+                p_pde_modifier->SetDependentVariableName("oxygen");
+
+                // Set the BSC on the elements that don't contain Cells.
+                p_pde_modifier->SetBcsOnBoxBoundary(false);
+                p_pde_modifier->SetBcsOnBoundingSphere(true);
+
+                simulator.AddSimulationModifier(p_pde_modifier);
             }
+
+            // Add data writer to output oxygen to a file for simple comparison
+            boost::shared_ptr<CellDataItemWriter<2,2> > p_cell_data_item_writer(new CellDataItemWriter<2,2>("oxygen"));
+            cell_population.AddCellWriter(p_cell_data_item_writer);
+
+            simulator.Solve();
+
+            // Test some simulation statistics
+            TS_ASSERT_EQUALS(simulator.rGetCellPopulation().GetNumAllCells(), 312u); // No birth yet
+
+            // Test against analytic solution .... From Bessels functions  
+            for (AbstractCellPopulation<2>::Iterator cell_iter = simulator.rGetCellPopulation().Begin();
+                    cell_iter != simulator.rGetCellPopulation().End();
+                    ++cell_iter)
+            {
+                c_vector<double,2>  cell_location = simulator.rGetCellPopulation().GetLocationOfCellCentre(*cell_iter);
+                double radius = norm_2(cell_location);
+            
+                if (radius<0.001)
+                {
+                    double oxygen = cell_iter->GetCellData()->GetItem("oxygen");
+
+                    if (pde_type == 2 || pde_type == 4)
+                    {
+                        // these are the averaged ones with volume not scaled (and cellwise scaled to match)
+                        TS_ASSERT_DELTA(oxygen, 0.253, 1e-2);
+                    }
+                    else
+                    {
+                        TS_ASSERT_DELTA(oxygen, 0.5781, 1e-2);
+                    }
+                }
+            }
+
+            // Reset for next pde
+            SimulationTime::Instance()->Destroy();
+            SimulationTime::Instance()->SetStartTime(0.0);
         }
     }
 
     /* 
-     * First test the solutions are the same (and match the analytic solution) for Cellwise uptake (i.e density dependent linear term)
+     * Now test with apoptotic region
      */
-
-    void TestEllipticGrowingDomainCellwisePde()
+    void TestEllipticPdesWithApoptoticRegion()
     {
-        TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-        MutableMesh<2,2> mesh;
-        mesh.ConstructFromMeshReader(mesh_reader);
-        mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
-        std::vector<CellPtr> cells;
-        GenerateCells(mesh.GetNumNodes(),cells,1.0);
-        MeshBasedCellPopulation<2> cell_population(mesh, cells);
+        std::string output_dir[6] = {"Elliptic/CircleConstantUptakeApoptotic/GrowingDomain/UniformPde",
+                                     "Elliptic/CircleConstantUptakeApoptotic/GrowingDomain/CellwisePde",
+                                     "Elliptic/CircleConstantUptakeApoptotic/GrowingDomain/VolumeScaledCellwisePde",
+                                     "Elliptic/CircleConstantUptakeApoptotic/BoxDomain/UniformPde",
+                                     "Elliptic/CircleConstantUptakeApoptotic/BoxDomain/AveragedPde",
+                                     "Elliptic/CircleConstantUptakeApoptotic/BoxDomain/VolumeScaledAveragedPde"};
 
-        cell_population.AddCellWriter<CellIdWriter>();
-        cell_population.AddCellWriter<CellMutationStatesWriter>();
-        cell_population.SetWriteVtkAsPoints(true);
-        cell_population.AddPopulationWriter<VoronoiDataWriter>();
-
-        // bound poulation so finite areas for cell scaling
-        cell_population.SetBoundVoronoiTessellation(true);
-
-        // Make apoptotic region
-        MakeApoptoicRegion(cell_population);
-
-        OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("Elliptic/CircleConstantUptake/GrowingDomain/CellwisePde");
-        simulator.SetDt(1.0);
-        simulator.SetSamplingTimestepMultiple(1.0);
-        simulator.SetEndTime(M_TIME_FOR_SIMULATION);
-
-        // Create PDE and boundary condition objects
-        bool is_volume_scaled = false;
-        MAKE_PTR_ARGS(CellwiseSourceEllipticPde<2>, p_pde, (cell_population, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
-        MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
-
-        // Create a PDE modifier and set the name of the dependent variable in the PDE
-        MAKE_PTR_ARGS(EllipticGrowingDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false));
-        p_pde_modifier->SetDependentVariableName("oxygen");
-        simulator.AddSimulationModifier(p_pde_modifier);
-
-        // Add data writer to output oxygen to a file for simple comparison
-        boost::shared_ptr<CellDataItemWriter<2,2> > p_cell_data_item_writer(new CellDataItemWriter<2,2>("oxygen"));
-        cell_population.AddCellWriter(p_cell_data_item_writer);
-
-        simulator.Solve();
-
-        // Test some simulation statistics
-        TS_ASSERT_EQUALS(simulator.rGetCellPopulation().GetNumAllCells(), 312u); // No birth yet
-
-        // Test against analytic solution .... From Bessels functions  
-        for (AbstractCellPopulation<2>::Iterator cell_iter = simulator.rGetCellPopulation().Begin();
-                cell_iter != simulator.rGetCellPopulation().End();
-                ++cell_iter)
+        for (unsigned pde_type = 0; pde_type != 6; pde_type++)
         {
-            c_vector<double,2>  cell_location = simulator.rGetCellPopulation().GetLocationOfCellCentre(*cell_iter);
-            double radius = norm_2(cell_location);
-            //double exact_solution = M_BOUNDARY_CONDITION + M_CELL_UPTAKE * 0.25 * (M_TISSUE_RADIUS * M_TISSUE_RADIUS - radius * radius);
+            PRINT_VARIABLE(output_dir[pde_type]);
 
-            if (radius<0.001)
+            TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
+            MutableMesh<2,2> mesh;
+            mesh.ConstructFromMeshReader(mesh_reader);
+            mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
+            std::vector<CellPtr> cells;
+            GenerateCells(mesh.GetNumNodes(),cells,1.0);
+            MeshBasedCellPopulation<2> cell_population(mesh, cells);
+
+            cell_population.AddCellWriter<CellIdWriter>();
+            cell_population.AddCellWriter<CellMutationStatesWriter>();
+            cell_population.SetWriteVtkAsPoints(true);
+            cell_population.AddPopulationWriter<VoronoiDataWriter>();
+
+            // bound poulation so finite areas for cell scaling
+            cell_population.SetBoundVoronoiTessellation(true);
+
+            // Add Apoptotic region 
+            MakeApoptoicRegion(cell_population);
+
+            OffLatticeSimulation<2> simulator(cell_population);
+            simulator.SetOutputDirectory(output_dir[pde_type]);
+            simulator.SetDt(1.0);
+            simulator.SetSamplingTimestepMultiple(1.0);
+            simulator.SetEndTime(M_TIME_FOR_SIMULATION);
+
+            // Create PDE 
+            boost::shared_ptr<AbstractLinearPde<2,2> > p_pde = MakePde(cell_population, pde_type);
+            
+            // create boundary condition
+            MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
+
+            // Create a PDE modifier and set the name of the dependent variable in the PDE
+            if (pde_type <3) //Growing Domain
             {
-                double oxygen = cell_iter->GetCellData()->GetItem("oxygen");
-                TS_ASSERT_DELTA(oxygen, 0.036710892271287, 1e-2);
+                MAKE_PTR_ARGS(EllipticGrowingDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false));
+                p_pde_modifier->SetDependentVariableName("oxygen");
+                simulator.AddSimulationModifier(p_pde_modifier);
             }
+            else // Box domain
+            {
+                // Create a ChasteCuboid on which to base the finite element mesh used to solve the PDE
+                ChastePoint<2> lower(-M_BOX_HALF_WIDTH, -M_BOX_HALF_WIDTH);
+                ChastePoint<2> upper(M_BOX_HALF_WIDTH, M_BOX_HALF_WIDTH);
+                MAKE_PTR_ARGS(ChasteCuboid<2>, p_cuboid, (lower, upper));
+
+                // Create a PDE modifier and set the name of the dependent variable in the PDE
+                MAKE_PTR_ARGS(EllipticBoxDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false, p_cuboid, M_BOX_H));
+                p_pde_modifier->SetDependentVariableName("oxygen");
+
+                // Set the BSC on the elements that don't contain Cells.
+                p_pde_modifier->SetBcsOnBoxBoundary(false);
+                p_pde_modifier->SetBcsOnBoundingSphere(true);
+
+                simulator.AddSimulationModifier(p_pde_modifier);
+            }
+
+            // Add data writer to output oxygen to a file for simple comparison
+            boost::shared_ptr<CellDataItemWriter<2,2> > p_cell_data_item_writer(new CellDataItemWriter<2,2>("oxygen"));
+            cell_population.AddCellWriter(p_cell_data_item_writer);
+
+            simulator.Solve();
+
+            // Test some simulation statistics
+            TS_ASSERT_EQUALS(simulator.rGetCellPopulation().GetNumAllCells(), 312u); // No birth yet
+
+            // Test against exixting solutions  
+            for (AbstractCellPopulation<2>::Iterator cell_iter = simulator.rGetCellPopulation().Begin();
+                    cell_iter != simulator.rGetCellPopulation().End();
+                    ++cell_iter)
+            {
+                c_vector<double,2>  cell_location = simulator.rGetCellPopulation().GetLocationOfCellCentre(*cell_iter);
+                double radius = norm_2(cell_location);
+            
+                if (radius<0.001)
+                {
+                    double oxygen = cell_iter->GetCellData()->GetItem("oxygen");
+
+                    if (pde_type == 2 || pde_type == 4)
+                    {
+                        // these are the averaged ones with volume not scaled (and cellwise scaled to match)
+                        TS_ASSERT_DELTA(oxygen, 0.439, 1e-2);
+                    }
+                    else if (pde_type == 1 || pde_type == 5)
+                    {
+                        TS_ASSERT_DELTA(oxygen, 0.734, 1e-2);
+                    }
+                    else 
+                    {
+                        //These are the uniform ones so no difference from example 1
+                        TS_ASSERT_DELTA(oxygen, 0.5781, 1e-2);
+                    }
+                }
+            }
+
+            // Reset for next pde
+            SimulationTime::Instance()->Destroy();
+            SimulationTime::Instance()->SetStartTime(0.0);
         }
     }
-
-    void TestEllipticGrowingDomainVolumeDependentCellwisePde()
-    {
-        TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-        MutableMesh<2,2> mesh;
-        mesh.ConstructFromMeshReader(mesh_reader);
-        mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
-        std::vector<CellPtr> cells;
-        GenerateCells(mesh.GetNumNodes(),cells,1.0);
-        MeshBasedCellPopulation<2> cell_population(mesh, cells);
-
-        cell_population.AddCellWriter<CellIdWriter>();
-        cell_population.AddCellWriter<CellMutationStatesWriter>();
-        cell_population.SetWriteVtkAsPoints(true);
-        cell_population.AddPopulationWriter<VoronoiDataWriter>();
-
-        // bound poulation so finite areas for cell scaling
-        cell_population.SetBoundVoronoiTessellation(true);
-
-        // Make apoptotic region
-        MakeApoptoicRegion(cell_population);
-
-        OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("Elliptic/CircleConstantUptake/GrowingDomain/VolumeScaledCellwisePde");
-        simulator.SetDt(1.0);
-        simulator.SetSamplingTimestepMultiple(1.0);
-        simulator.SetEndTime(M_TIME_FOR_SIMULATION);
-
-        // Create PDE and boundary condition objects
-        bool is_volume_scaled = true;
-        MAKE_PTR_ARGS(CellwiseSourceEllipticPde<2>, p_pde, (cell_population, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
-        MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
-
-        // Create a PDE modifier and set the name of the dependent variable in the PDE
-        MAKE_PTR_ARGS(EllipticGrowingDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false));
-        p_pde_modifier->SetDependentVariableName("oxygen");
-        simulator.AddSimulationModifier(p_pde_modifier);
-
-        // Add data writer to output oxygen to a file for simple comparison
-        boost::shared_ptr<CellDataItemWriter<2,2> > p_cell_data_item_writer(new CellDataItemWriter<2,2>("oxygen"));
-        cell_population.AddCellWriter(p_cell_data_item_writer);
-
-        simulator.Solve();
-
-        // Test some simulation statistics
-        TS_ASSERT_EQUALS(simulator.rGetCellPopulation().GetNumAllCells(), 312u); // No birth yet
-
-        // Test against analytic solution .... From Bessels functions  
-        for (AbstractCellPopulation<2>::Iterator cell_iter = simulator.rGetCellPopulation().Begin();
-                cell_iter != simulator.rGetCellPopulation().End();
-                ++cell_iter)
-        {
-            c_vector<double,2>  cell_location = simulator.rGetCellPopulation().GetLocationOfCellCentre(*cell_iter);
-            double radius = norm_2(cell_location);
-            //double exact_solution = M_BOUNDARY_CONDITION + M_CELL_UPTAKE * 0.25 * (M_TISSUE_RADIUS * M_TISSUE_RADIUS - radius * radius);
-
-            if (radius<0.001)
-            {
-                double oxygen = cell_iter->GetCellData()->GetItem("oxygen");
-                TS_ASSERT_DELTA(oxygen, 0.036710892271287, 1e-2);
-            }
-        }
-    }
-
-
-    void TestEllipticBoxDomainAveragedPde()
-    {
-        // Circular Mesh
-        TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-        MutableMesh<2,2> mesh;
-        mesh.ConstructFromMeshReader(mesh_reader);
-        mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
-        std::vector<CellPtr> cells;
-        GenerateCells(mesh.GetNumNodes(),cells,1.0);
-        MeshBasedCellPopulation<2> cell_population(mesh, cells);
-
-        cell_population.AddCellWriter<CellIdWriter>();
-        cell_population.AddCellWriter<CellMutationStatesWriter>();
-        cell_population.SetWriteVtkAsPoints(true);
-        cell_population.AddPopulationWriter<VoronoiDataWriter>();
-
-        // Make apoptotic region
-        MakeApoptoicRegion(cell_population);
-
-        OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("Elliptic/CircleConstantUptake/BoxDomain/AveragedPde");
-        simulator.SetDt(1.0);
-        simulator.SetSamplingTimestepMultiple(1);
-        simulator.SetEndTime(M_TIME_FOR_SIMULATION);
-
-        // Create PDE and boundary condition objects
-        bool is_volume_scaled = false;
-        MAKE_PTR_ARGS(AveragedSourceEllipticPde<2>, p_pde, (cell_population, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
-        MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
-
-        // Create a ChasteCuboid on which to base the finite element mesh used to solve the PDE
-        ChastePoint<2> lower(-M_BOX_HALF_WIDTH, -M_BOX_HALF_WIDTH);
-        ChastePoint<2> upper(M_BOX_HALF_WIDTH, M_BOX_HALF_WIDTH);
-        MAKE_PTR_ARGS(ChasteCuboid<2>, p_cuboid, (lower, upper));
-
-        // Create a PDE modifier and set the name of the dependent variable in the PDE
-        MAKE_PTR_ARGS(EllipticBoxDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false, p_cuboid, M_BOX_H));
-        p_pde_modifier->SetDependentVariableName("oxygen");
-        
-        // Set the BSC on the elements that don't contain Cells.
-        p_pde_modifier->SetBcsOnBoxBoundary(false);
-        p_pde_modifier->SetBcsOnBoundingSphere(true);
-
-        simulator.AddSimulationModifier(p_pde_modifier);
-
-        // Add data writer to output oxygen to a file for simple comparison
-        boost::shared_ptr<CellDataItemWriter<2,2> > p_cell_data_item_writer(new CellDataItemWriter<2,2>("oxygen"));
-        cell_population.AddCellWriter(p_cell_data_item_writer);
-
-        simulator.Solve();
-
-        // Test some simulation statistics
-        TS_ASSERT_EQUALS(simulator.rGetCellPopulation().GetNumAllCells(), 312u); // No birth yet
-
-        // Test against analytic solution .... From Bessels functions  
-        for (AbstractCellPopulation<2>::Iterator cell_iter = simulator.rGetCellPopulation().Begin();
-                cell_iter != simulator.rGetCellPopulation().End();
-                ++cell_iter)
-        {
-            c_vector<double,2>  cell_location = simulator.rGetCellPopulation().GetLocationOfCellCentre(*cell_iter);
-            double radius = norm_2(cell_location);
-            //double exact_solution = M_BOUNDARY_CONDITION + M_CELL_UPTAKE * 0.25 * (M_TISSUE_RADIUS * M_TISSUE_RADIUS - radius * radius);
-
-            if (radius<0.001)
-            {
-                double oxygen = cell_iter->GetCellData()->GetItem("oxygen");
-                TS_ASSERT_DELTA(oxygen, 0.036710892271287, 1e-2);
-            }
-        }
-    }
-
-void TestEllipticBoxDomainVolumeDependentAveragedPde()
-    {
-        // Circular Mesh
-        TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-        MutableMesh<2,2> mesh;
-        mesh.ConstructFromMeshReader(mesh_reader);
-        mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
-        std::vector<CellPtr> cells;
-        GenerateCells(mesh.GetNumNodes(),cells,1.0);
-        MeshBasedCellPopulation<2> cell_population(mesh, cells);
-
-        cell_population.AddCellWriter<CellIdWriter>();
-        cell_population.AddCellWriter<CellMutationStatesWriter>();
-        cell_population.SetWriteVtkAsPoints(true);
-        cell_population.AddPopulationWriter<VoronoiDataWriter>();
-
-        // Make apoptotic region
-        MakeApoptoicRegion(cell_population);
-
-        // bound poulation so finite areas for cell scaling
-        cell_population.SetBoundVoronoiTessellation(true);
-
-        OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("Elliptic/CircleConstantUptake/BoxDomain/VolumeScaledAveragedPde");
-        simulator.SetDt(1.0);
-        simulator.SetSamplingTimestepMultiple(1);
-        simulator.SetEndTime(M_TIME_FOR_SIMULATION);
-
-        // Create PDE and boundary condition objects
-        bool is_volume_scaled = false;
-        MAKE_PTR_ARGS(AveragedSourceEllipticPde<2>, p_pde, (cell_population, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
-        MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
-
-        // Create a ChasteCuboid on which to base the finite element mesh used to solve the PDE
-        ChastePoint<2> lower(-M_BOX_HALF_WIDTH, -M_BOX_HALF_WIDTH);
-        ChastePoint<2> upper(M_BOX_HALF_WIDTH, M_BOX_HALF_WIDTH);
-        MAKE_PTR_ARGS(ChasteCuboid<2>, p_cuboid, (lower, upper));
-
-        // Create a PDE modifier and set the name of the dependent variable in the PDE
-        MAKE_PTR_ARGS(EllipticBoxDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false, p_cuboid, M_BOX_H));
-        p_pde_modifier->SetDependentVariableName("oxygen");
-        
-        // Set the BSC on the elements that don't contain Cells.
-        p_pde_modifier->SetBcsOnBoxBoundary(false);
-        p_pde_modifier->SetBcsOnBoundingSphere(true);
-
-        simulator.AddSimulationModifier(p_pde_modifier);
-
-        // Add data writer to output oxygen to a file for simple comparison
-        boost::shared_ptr<CellDataItemWriter<2,2> > p_cell_data_item_writer(new CellDataItemWriter<2,2>("oxygen"));
-        cell_population.AddCellWriter(p_cell_data_item_writer);
-
-        simulator.Solve();
-
-        // Test some simulation statistics
-        TS_ASSERT_EQUALS(simulator.rGetCellPopulation().GetNumAllCells(), 312u); // No birth yet
-
-        // Test against analytic solution .... From Bessels functions  
-        for (AbstractCellPopulation<2>::Iterator cell_iter = simulator.rGetCellPopulation().Begin();
-                cell_iter != simulator.rGetCellPopulation().End();
-                ++cell_iter)
-        {
-            c_vector<double,2>  cell_location = simulator.rGetCellPopulation().GetLocationOfCellCentre(*cell_iter);
-            double radius = norm_2(cell_location);
-            //double exact_solution = M_BOUNDARY_CONDITION + M_CELL_UPTAKE * 0.25 * (M_TISSUE_RADIUS * M_TISSUE_RADIUS - radius * radius);
-
-            if (radius<0.001)
-            {
-                double oxygen = cell_iter->GetCellData()->GetItem("oxygen");
-                TS_ASSERT_DELTA(oxygen, 0.036710892271287, 1e-2);
-            }
-        }
-    }
-
-
 
 };
 
