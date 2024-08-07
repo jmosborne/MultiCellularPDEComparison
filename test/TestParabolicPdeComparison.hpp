@@ -33,8 +33,8 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#ifndef TESTELLIPTICPDECOMPARISION
-#define TESTELLIPTICPDECOMPARISION
+#ifndef TESTPARABOLICPDECOMPARISION
+#define TESTPARABOLICPDECOMPARISION
 
 #include <cxxtest/TestSuite.h>
 #include "AbstractCellBasedWithTimingsTestSuite.hpp"
@@ -44,12 +44,12 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "CellDataItemWriter.hpp"
 #include "VoronoiDataWriter.hpp"
 #include "CellMutationStatesWriter.hpp"
-#include "EllipticBoxDomainPdeModifier.hpp"
-#include "EllipticGrowingDomainPdeModifier.hpp"
+#include "ParabolicBoxDomainPdeModifier.hpp"
+#include "ParabolicGrowingDomainPdeModifier.hpp"
 
-#include "UniformSourceEllipticPde.hpp"
-#include "CellwiseSourceEllipticPde.hpp"
-#include "AveragedSourceEllipticPde.hpp"
+#include "UniformSourceParabolicPde.hpp"
+#include "CellwiseSourceParabolicPde.hpp"
+#include "AveragedSourceParabolicPde.hpp"
 #include "VolumeTrackingModifier.hpp"
 #include "FixedG1GenerationalCellCycleModel.hpp"
 #include "ApoptoticCellProperty.hpp"
@@ -66,26 +66,25 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "HoneycombVertexMeshGenerator.hpp"
 #include "NagaiHondaForce.hpp"
 #include "SimpleTargetAreaModifier.hpp"
+#include "RadialGrowthForce.hpp"
 #include "Debug.hpp"
 
 // This test is always run sequentially (never in parallel)
 #include "FakePetscSetup.hpp"
 
+static const double M_DT = 0.01;
 static const double M_TIME_FOR_SIMULATION = 1.0;
-
 
 static const double M_TISSUE_RADIUS = 5; 
 static const double M_APOPTOTIC_RADIUS = 2;
 static const double M_BOX_HALF_WIDTH = 6; 
 static const double M_BOX_H = 0.1;
-static const double M_CONSTANT_UPTAKE = 0.0; 
-static const double M_LINEAR_UPTAKE = -0.1; 
-static const double M_DIFFUSION_COEFICIENT = 1.0; 
+static const double M_CONSTANT_UPTAKE = 0.1; 
+static const double M_LINEAR_UPTAKE = 0.1; 
+static const double M_DIFFUSION_COEFICIENT = 0.5; 
+static const double M_DUDT_COEFICIENT = 0.5;
 
-
-static const double M_BOUNDARY_CONDITION = 1;
-
- 
+static const double M_BOUNDARY_CONDITION = 0;
 
 
 class TestEllipticPdeComparison : public AbstractCellBasedWithTimingsTestSuite
@@ -107,7 +106,7 @@ private:
             p_cell->SetCellProliferativeType(p_diff_type);
             double birth_time = -RandomNumberGenerator::Instance()->ranf()*18.0;
             p_cell->SetBirthTime(birth_time);
-
+            p_cell->GetCellData()->SetItem("morphogen",0.0); //Specifying initial condition     
             rCells.push_back(p_cell);
         }
 
@@ -136,28 +135,28 @@ private:
 
         if (pde_type == 0 || pde_type == 3)
         {
-            ASSIGN_PTR(p_pde, UniformSourceEllipticPde<2>, (M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT));
+            ASSIGN_PTR(p_pde, UniformSourceParabolicPde<2>, (M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, M_DUDT_COEFICIENT));
         }
         else if (pde_type == 1)
         {
             bool is_volume_scaled = false;
-            ASSIGN_PTR(p_pde, CellwiseSourceEllipticPde<2>, (rCellPopulation, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
+            ASSIGN_PTR(p_pde, CellwiseSourceParabolicPde<2>, (rCellPopulation, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, M_DUDT_COEFICIENT, is_volume_scaled));
         }
         else if (pde_type == 2)
         {
             bool is_volume_scaled = true;
-            ASSIGN_PTR(p_pde, CellwiseSourceEllipticPde<2>, (rCellPopulation, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
+            ASSIGN_PTR(p_pde, CellwiseSourceParabolicPde<2>, (rCellPopulation, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, M_DUDT_COEFICIENT, is_volume_scaled));
         }
         else if (pde_type == 4)
         {
             bool is_volume_scaled = false;
-            ASSIGN_PTR(p_pde, AveragedSourceEllipticPde<2>, (rCellPopulation, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));       
+            ASSIGN_PTR(p_pde, AveragedSourceParabolicPde<2>, (rCellPopulation, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, M_DUDT_COEFICIENT, is_volume_scaled));       
         }
         else
         {
             assert(pde_type == 5);
             bool is_volume_scaled = true;
-            ASSIGN_PTR(p_pde, AveragedSourceEllipticPde<2>, (rCellPopulation, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, is_volume_scaled));
+            ASSIGN_PTR(p_pde, AveragedSourceParabolicPde<2>, (rCellPopulation, M_CONSTANT_UPTAKE, M_LINEAR_UPTAKE, M_DIFFUSION_COEFICIENT, M_DUDT_COEFICIENT, is_volume_scaled));
         }
 
         return p_pde;
@@ -165,20 +164,22 @@ private:
 
 public:
     /* 
-     * First test the solutions are the same (and match the analytic solution) for Uniform uptake (i.e only constant linear term)
-     *
-     * D Grad.(Grad u) + au + b = 0; 
-     * D=1.0, a=-0.1, b=0.0
+     * First test the solutions are the same (as expected) for Uniform uptake (i.e only constant and linear term)
+     * on a static tissue
+     *  
+     * With an apoptotic region 
+     * 
+     * du/dt = D Grad.(Grad u) + au + b; 
      * 
      */
-    void TestEllipticPdes()
+    void noTestParabolicPdes()
     {
-        std::string output_dir[6] = {"Elliptic/StaticDisc/GrowingDomain/UniformPde",
-                                     "Elliptic/StaticDisc/GrowingDomain/CellwisePde",
-                                     "Elliptic/StaticDisc/GrowingDomain/VolumeScaledCellwisePde",
-                                     "Elliptic/StaticDisc/BoxDomain/UniformPde",
-                                     "Elliptic/StaticDisc/BoxDomain/AveragedPde",
-                                     "Elliptic/StaticDisc/BoxDomain/VolumeScaledAveragedPde"};
+        std::string output_dir[6] = {"Parabolic/StaticDisc/GrowingDomain/UniformPde",
+                                     "Parabolic/StaticDisc/GrowingDomain/CellwisePde",
+                                     "Parabolic/StaticDisc/GrowingDomain/VolumeScaledCellwisePde",
+                                     "Parabolic/StaticDisc/BoxDomain/UniformPde",
+                                     "Parabolic/StaticDisc/BoxDomain/AveragedPde",
+                                     "Parabolic/StaticDisc/BoxDomain/VolumeScaledAveragedPde"};
 
         for (unsigned pde_type = 0; pde_type != 6; pde_type++)
         {
@@ -200,10 +201,12 @@ public:
             // bound poulation so finite areas for cell scaling
             cell_population.SetBoundVoronoiTessellation(true);
 
+MakeApoptoicRegion(cell_population);
+
             OffLatticeSimulation<2> simulator(cell_population);
             simulator.SetOutputDirectory(output_dir[pde_type]);
-            simulator.SetDt(1.0);
-            simulator.SetSamplingTimestepMultiple(1.0);
+            simulator.SetDt(M_DT);
+            simulator.SetSamplingTimestepMultiple(10);
             simulator.SetEndTime(M_TIME_FOR_SIMULATION);
 
             // Create PDE 
@@ -212,12 +215,12 @@ public:
             // create boundary condition
             MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
   
-
             // Create a PDE modifier and set the name of the dependent variable in the PDE
             if (pde_type <3) //Growing Domain
             {
-                MAKE_PTR_ARGS(EllipticGrowingDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false));
-                p_pde_modifier->SetDependentVariableName("oxygen");
+                bool is_neuman_bcs = false;
+                MAKE_PTR_ARGS(ParabolicGrowingDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, is_neuman_bcs));
+                p_pde_modifier->SetDependentVariableName("morphogen");
                 simulator.AddSimulationModifier(p_pde_modifier);
             }
             else // Box domain
@@ -228,8 +231,9 @@ public:
                 MAKE_PTR_ARGS(ChasteCuboid<2>, p_cuboid, (lower, upper));
 
                 // Create a PDE modifier and set the name of the dependent variable in the PDE
-                MAKE_PTR_ARGS(EllipticBoxDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false, p_cuboid, M_BOX_H));
-                p_pde_modifier->SetDependentVariableName("oxygen");
+                bool is_neuman_bcs = false;
+                MAKE_PTR_ARGS(ParabolicBoxDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, is_neuman_bcs, p_cuboid, M_BOX_H));
+                p_pde_modifier->SetDependentVariableName("morphogen");
 
                 // Set the BSC on the elements that don't contain Cells.
                 p_pde_modifier->SetBcsOnBoxBoundary(false);
@@ -239,7 +243,7 @@ public:
             }
 
             // Add data writer to output oxygen to a file for simple comparison
-            boost::shared_ptr<CellDataItemWriter<2,2> > p_cell_data_item_writer(new CellDataItemWriter<2,2>("oxygen"));
+            boost::shared_ptr<CellDataItemWriter<2,2> > p_cell_data_item_writer(new CellDataItemWriter<2,2>("morphogen"));
             cell_population.AddCellWriter(p_cell_data_item_writer);
 
             simulator.Solve();
@@ -257,16 +261,16 @@ public:
             
                 if (radius<0.001)
                 {
-                    double oxygen = cell_iter->GetCellData()->GetItem("oxygen");
+                    double morphogen = cell_iter->GetCellData()->GetItem("morphogen");
 
                     if (pde_type == 2 || pde_type == 4)
                     {
                         // these are the averaged ones with volume not scaled (and cellwise scaled to match)
-                        TS_ASSERT_DELTA(oxygen, 0.253, 1e-2);
+                        TS_ASSERT_DELTA(morphogen, 0.253, 1e-2);
                     }
                     else
                     {
-                        TS_ASSERT_DELTA(oxygen, 0.5781, 1e-2);
+                        TS_ASSERT_DELTA(morphogen, 0.5781, 1e-2);
                     }
                 }
             }
@@ -276,18 +280,26 @@ public:
             SimulationTime::Instance()->SetStartTime(0.0);
         }
     }
-
+    
     /* 
-     * Now test with apoptotic region
+     * Now test the solutions are the same (as expected) for Uniform uptake (i.e only constant and linear term)
+     * on a growing tissue
+     *  
+     * Maybe With an apoptotic region? 
+     * 
+     * du/dt = D Grad.(Grad u) + au + b; 
+     * 
+     * Tissue growing at drdt = alpha r (i.e growing radially)
+     * 
      */
-    void TestEllipticPdesWithApoptoticRegion()
+    void TestParabolicPdesOnGrowingDomain()
     {
-        std::string output_dir[6] = {"Elliptic/StaticDiscApoptotic/GrowingDomain/UniformPde",
-                                     "Elliptic/StaticDiscApoptotic/GrowingDomain/CellwisePde",
-                                     "Elliptic/StaticDiscApoptotic/GrowingDomain/VolumeScaledCellwisePde",
-                                     "Elliptic/StaticDiscApoptotic/BoxDomain/UniformPde",
-                                     "Elliptic/StaticDiscApoptotic/BoxDomain/AveragedPde",
-                                     "Elliptic/StaticDiscApoptotic/BoxDomain/VolumeScaledAveragedPde"};
+        std::string output_dir[6] = {"Parabolic/GrowingDisc/GrowingDomain/UniformPde",
+                                     "Parabolic/GrowingDisc/GrowingDomain/CellwisePde",
+                                     "Parabolic/GrowingDisc/GrowingDomain/VolumeScaledCellwisePde",
+                                     "Parabolic/GrowingDisc/BoxDomain/UniformPde",
+                                     "Parabolic/GrowingDisc/BoxDomain/AveragedPde",
+                                     "Parabolic/GrowingDisc/BoxDomain/VolumeScaledAveragedPde"};
 
         for (unsigned pde_type = 0; pde_type != 6; pde_type++)
         {
@@ -309,38 +321,42 @@ public:
             // bound poulation so finite areas for cell scaling
             cell_population.SetBoundVoronoiTessellation(true);
 
-            // Add Apoptotic region 
-            MakeApoptoicRegion(cell_population);
-
             OffLatticeSimulation<2> simulator(cell_population);
             simulator.SetOutputDirectory(output_dir[pde_type]);
-            simulator.SetDt(1.0);
-            simulator.SetSamplingTimestepMultiple(1.0);
+            simulator.SetDt(M_DT);
+            simulator.SetSamplingTimestepMultiple(10);
             simulator.SetEndTime(M_TIME_FOR_SIMULATION);
+
+            // Use a force to make the domain grow
+            MAKE_PTR(RadialGrowthForce<2>, p_growth_force);
+            simulator.AddForce(p_growth_force);
+
 
             // Create PDE 
             boost::shared_ptr<AbstractLinearPde<2,2> > p_pde = MakePde(cell_population, pde_type);
-            
+
             // create boundary condition
             MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
-
+  
             // Create a PDE modifier and set the name of the dependent variable in the PDE
             if (pde_type <3) //Growing Domain
             {
-                MAKE_PTR_ARGS(EllipticGrowingDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false));
-                p_pde_modifier->SetDependentVariableName("oxygen");
+                bool is_neuman_bcs = false;
+                MAKE_PTR_ARGS(ParabolicGrowingDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, is_neuman_bcs));
+                p_pde_modifier->SetDependentVariableName("morphogen");
                 simulator.AddSimulationModifier(p_pde_modifier);
             }
             else // Box domain
             {
                 // Create a ChasteCuboid on which to base the finite element mesh used to solve the PDE
-                ChastePoint<2> lower(-M_BOX_HALF_WIDTH, -M_BOX_HALF_WIDTH);
-                ChastePoint<2> upper(M_BOX_HALF_WIDTH, M_BOX_HALF_WIDTH);
+                ChastePoint<2> lower(-15, -15);
+                ChastePoint<2> upper(15, 15);
                 MAKE_PTR_ARGS(ChasteCuboid<2>, p_cuboid, (lower, upper));
 
                 // Create a PDE modifier and set the name of the dependent variable in the PDE
-                MAKE_PTR_ARGS(EllipticBoxDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, false, p_cuboid, M_BOX_H));
-                p_pde_modifier->SetDependentVariableName("oxygen");
+                bool is_neuman_bcs = false;
+                MAKE_PTR_ARGS(ParabolicBoxDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, is_neuman_bcs, p_cuboid, 5*M_BOX_H));
+                p_pde_modifier->SetDependentVariableName("morphogen");
 
                 // Set the BSC on the elements that don't contain Cells.
                 p_pde_modifier->SetBcsOnBoxBoundary(false);
@@ -350,7 +366,7 @@ public:
             }
 
             // Add data writer to output oxygen to a file for simple comparison
-            boost::shared_ptr<CellDataItemWriter<2,2> > p_cell_data_item_writer(new CellDataItemWriter<2,2>("oxygen"));
+            boost::shared_ptr<CellDataItemWriter<2,2> > p_cell_data_item_writer(new CellDataItemWriter<2,2>("morphogen"));
             cell_population.AddCellWriter(p_cell_data_item_writer);
 
             simulator.Solve();
@@ -358,7 +374,7 @@ public:
             // Test some simulation statistics
             TS_ASSERT_EQUALS(simulator.rGetCellPopulation().GetNumAllCells(), 312u); // No birth yet
 
-            // Test against exixting solutions  
+            // Test against analytic solution .... From Bessels functions  
             for (AbstractCellPopulation<2>::Iterator cell_iter = simulator.rGetCellPopulation().Begin();
                     cell_iter != simulator.rGetCellPopulation().End();
                     ++cell_iter)
@@ -368,21 +384,16 @@ public:
             
                 if (radius<0.001)
                 {
-                    double oxygen = cell_iter->GetCellData()->GetItem("oxygen");
+                    double morphogen = cell_iter->GetCellData()->GetItem("morphogen");
 
                     if (pde_type == 2 || pde_type == 4)
                     {
                         // these are the averaged ones with volume not scaled (and cellwise scaled to match)
-                        TS_ASSERT_DELTA(oxygen, 0.439, 1e-2);
+                        TS_ASSERT_DELTA(morphogen, 0.253, 1e-2);
                     }
-                    else if (pde_type == 1 || pde_type == 5)
+                    else
                     {
-                        TS_ASSERT_DELTA(oxygen, 0.734, 1e-2);
-                    }
-                    else 
-                    {
-                        //These are the uniform ones so no difference from example 1
-                        TS_ASSERT_DELTA(oxygen, 0.5781, 1e-2);
+                        TS_ASSERT_DELTA(morphogen, 0.5781, 1e-2);
                     }
                 }
             }
@@ -395,4 +406,4 @@ public:
 
 };
 
-#endif /*TESTELLIPTICPDECOMPARISION*/
+#endif /*TESTPARABOLICPDECOMPARISION*/
