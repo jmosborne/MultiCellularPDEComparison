@@ -39,7 +39,7 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 template<unsigned DIM>
 RadialGrowthForce<DIM>::RadialGrowthForce()
     : AbstractForce<DIM>(),
-      mRadialVelocity(0.01) // defaults to 0.1
+      mRadialVelocity(0.5) // defaults to 0.1
 {
 }
 
@@ -65,7 +65,9 @@ double RadialGrowthForce<DIM>::GetRadialVelocity()
 template<unsigned DIM>
 void RadialGrowthForce<DIM>::AddForceContribution(AbstractCellPopulation<DIM>& rCellPopulation)
 {
-    double dt = SimulationTime::Instance()->GetTimeStep();
+    //double dt = SimulationTime::Instance()->GetTimeStep();
+
+    double max_radius = 0.5*rCellPopulation.GetWidth(0);
 
     // Iterate over the nodes
     for (typename AbstractMesh<DIM, DIM>::NodeIterator node_iter = rCellPopulation.rGetMesh().GetNodeIteratorBegin();
@@ -74,7 +76,7 @@ void RadialGrowthForce<DIM>::AddForceContribution(AbstractCellPopulation<DIM>& r
     {
         const c_vector<double, DIM>& node_location = node_iter->rGetLocation();
 
-        c_vector<double, DIM> force_contribution = node_location * mRadialVelocity / dt;
+        c_vector<double, DIM> force_contribution = node_location / max_radius * mRadialVelocity;
         
         node_iter->AddAppliedForceContribution(force_contribution);
     }
