@@ -37,9 +37,9 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "NodeBasedCellPopulation.hpp"
 
 template<unsigned DIM>
-RadialGrowthForce<DIM>::RadialGrowthForce()
+RadialGrowthForce<DIM>::RadialGrowthForce(double radialVelocity)
     : AbstractForce<DIM>(),
-      mRadialVelocity(0.5) // defaults to 0.1
+      mRadialVelocity(radialVelocity) // defaults to 0.5
 {
 }
 

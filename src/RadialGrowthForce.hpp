@@ -94,7 +94,7 @@ public :
     /**
      * Constructor.
      */
-    RadialGrowthForce();
+    RadialGrowthForce(double radialVelocity = 0.5);
 
     /**
      * Destructor.

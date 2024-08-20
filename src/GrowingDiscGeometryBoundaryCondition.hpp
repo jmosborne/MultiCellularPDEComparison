@@ -33,8 +33,8 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#ifndef DISCGEOMETRYBOUNDARYCONDITION_HPP_
-#define DISCGEOMETRYBOUNDARYCONDITION_HPP_
+#ifndef GrowingDiscGeometryBoundaryCondition_HPP_
+#define GrowingDiscGeometryBoundaryCondition_HPP_
 
 #include "AbstractCellPopulationBoundaryCondition.hpp"
 
@@ -49,7 +49,7 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * a disc geometry boundary condition.
  */
 template<unsigned DIM>
-class DiscGeometryBoundaryCondition : public AbstractCellPopulationBoundaryCondition<DIM>
+class GrowingDiscGeometryBoundaryCondition : public AbstractCellPopulationBoundaryCondition<DIM>
 {
 private:
 
@@ -58,6 +58,9 @@ private:
 
     /** The radius of the sphere. */
     double mRadiusOfSphere;
+    
+    /** The rate of growth of the sphere. */
+    double mGrowthRate;
 
     /** Needed for serialization. */
     friend class boost::serialization::access;
@@ -71,6 +74,7 @@ private:
     void serialize(Archive & archive, const unsigned int version)
     {
         archive & boost::serialization::base_object<AbstractCellPopulationBoundaryCondition<DIM> >(*this);
+        archive & mGrowthRate;
     }
 
 public:
@@ -81,10 +85,12 @@ public:
      * @param pCellPopulation pointer to the cell population
      * @param centre the centre of the sphere
      * @param radius the radius of the sphere
+     * @param growthRate how fast the doamin grows, defaults to 0
      */
-    DiscGeometryBoundaryCondition(AbstractCellPopulation<DIM>* pCellPopulation,
+    GrowingDiscGeometryBoundaryCondition(AbstractCellPopulation<DIM>* pCellPopulation,
                                     c_vector<double, DIM> centre,
-                                    double radius);
+                                    double radius,
+                                    double growthRate = 0.0);
 
     /**
      * @return #mCentreOfSphere.
@@ -124,18 +130,18 @@ public:
 };
 
 #include "SerializationExportWrapper.hpp"
-EXPORT_TEMPLATE_CLASS_SAME_DIMS(DiscGeometryBoundaryCondition)
+EXPORT_TEMPLATE_CLASS_SAME_DIMS(GrowingDiscGeometryBoundaryCondition)
 
 namespace boost
 {
 namespace serialization
 {
 /**
- * Serialize information required to construct a DiscGeometryBoundaryCondition.
+ * Serialize information required to construct a GrowingDiscGeometryBoundaryCondition.
  */
 template<class Archive, unsigned DIM>
 inline void save_construct_data(
-    Archive & ar, const DiscGeometryBoundaryCondition<DIM>* t, const unsigned int file_version)
+    Archive & ar, const GrowingDiscGeometryBoundaryCondition<DIM>* t, const unsigned int file_version)
 {
     // Save data required to construct instance
     const AbstractCellPopulation<DIM>* const p_cell_population = t->GetCellPopulation();
@@ -154,11 +160,11 @@ inline void save_construct_data(
 }
 
 /**
- * De-serialize constructor parameters and initialize a DiscGeometryBoundaryCondition.
+ * De-serialize constructor parameters and initialize a GrowingDiscGeometryBoundaryCondition.
  */
 template<class Archive, unsigned DIM>
 inline void load_construct_data(
-    Archive & ar, DiscGeometryBoundaryCondition<DIM>* t, const unsigned int file_version)
+    Archive & ar, GrowingDiscGeometryBoundaryCondition<DIM>* t, const unsigned int file_version)
 {
     // Retrieve data from archive required to construct new instance
     AbstractCellPopulation<DIM>* p_cell_population;
@@ -176,9 +182,9 @@ inline void load_construct_data(
     ar >> radius;
 
     // Invoke inplace constructor to initialise instance
-    ::new(t)DiscGeometryBoundaryCondition<DIM>(p_cell_population, point, radius);
+    ::new(t)GrowingDiscGeometryBoundaryCondition<DIM>(p_cell_population, point, radius);
 }
 }
 } // namespace ...
 
-#endif /*DISCGEOMETRYBOUNDARYCONDITION_HPP_*/
+#endif /*GrowingDiscGeometryBoundaryCondition_HPP_*/
