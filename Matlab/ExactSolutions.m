@@ -13,6 +13,7 @@ k=0.1;
 model = createpde();
 g = geometryFromEdges(model,@radius_circleg);
 
+
 applyBoundaryCondition(model,"dirichlet", ...
                              "Edge",1:model.Geometry.NumEdges, ...
                              "u",C0);
