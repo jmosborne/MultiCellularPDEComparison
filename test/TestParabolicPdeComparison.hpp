@@ -38,11 +38,6 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <cxxtest/TestSuite.h>
 
-// This macro prevents errors with GCC 4.8 of form "unable to find numeric literal operator 'operator"" Q'"
-// when compiling with -std=gnu++11 (see #2929). \todo: remove when GCC 4.8 is no longer supported.
-#define BOOST_MATH_DISABLE_FLOAT128
-#include <boost/math/special_functions/bessel.hpp>
-
 #include "AbstractCellBasedWithTimingsTestSuite.hpp"
 #include "SmartPointers.hpp"
 #include "DifferentiatedCellProliferativeType.hpp"
@@ -87,7 +82,7 @@ static const double M_TIME_FOR_SIMULATION = 10;
 static const double M_TISSUE_RADIUS = 5; 
 static const double M_APOPTOTIC_RADIUS = 2;
 static const double M_BOX_HALF_WIDTH = 6;
-static const double M_GROWING_BOX_HALF_WIDTH = 11; 
+static const double M_GROWING_BOX_HALF_WIDTH = 21; 
 static const double M_BOX_H = 0.25;
 static const double M_CONSTANT_UPTAKE = 0.0; 
 static const double M_LINEAR_UPTAKE = -0.1; 
@@ -114,7 +109,7 @@ private:
         
             ContactInhibitionCellCycleModel* p_cycle_model = new ContactInhibitionCellCycleModel();
             p_cycle_model->SetDimension(2);
-            p_cycle_model->SetBirthTime(-3.5);
+            p_cycle_model->SetBirthTime(-3.5); // so 0.5 left in cc so can CI
             p_cycle_model->SetQuiescentVolumeFraction(EquilibriumVolume);
             p_cycle_model->SetEquilibriumVolume(0.5*sqrt(3.0));
 
@@ -262,19 +257,7 @@ public:
                     simulator.SetSamplingTimestepMultiple(M_SAMPLING_MULTIPLE);
                     simulator.SetEndTime(M_TIME_FOR_SIMULATION);
                     
-// if (tissue_type.compare("StaticDisc")!=0)
-// {
-//     TRACE("Not StaticDisc");
-//     if (domain_type.compare("GrowingDomain")==0)
-//     {
-//         TRACE("GrowingDomain");
-//         if (pde_type.compare("UniformPde")==0)
-//         {
-//             TRACE("UniformPde");
-            simulator.SetOutputCellVelocities(true);
-//         }
-//     }
-// }
+                    simulator.SetOutputCellVelocities(true);
 
                     MAKE_PTR(VolumeTrackingModifier<2>, p_modifier);
                     simulator.AddSimulationModifier(p_modifier);
@@ -364,33 +347,6 @@ public:
 
                     simulator.Solve();
 
-                    // Test some simulation statistics
-                    // TS_ASSERT_EQUALS(simulator.rGetCellPopulation().GetNumAllCells(), 312u); // No birth yet
-
-                    // Test against analytic solution .... From Bessels functions  
-                    // for (AbstractCellPopulation<2>::Iterator cell_iter = simulator.rGetCellPopulation().Begin();
-                    //         cell_iter != simulator.rGetCellPopulation().End();
-                    //         ++cell_iter)
-                    // {
-                    //     c_vector<double,2>  cell_location = simulator.rGetCellPopulation().GetLocationOfCellCentre(*cell_iter);
-                    //     double radius = norm_2(cell_location);
-                    
-                    //     if (radius<0.001)
-                    //     {
-                    //         double morphogen = cell_iter->GetCellData()->GetItem("morphogen");
-
-                    //         if (pde_type.compare("VolumeScaledCellwisePde") || pde_type.compare("AveragedPde"))
-                    //         {
-                    //             // these are the averaged ones with volume not scaled (and cellwise scaled to match)
-                    //             TS_ASSERT_DELTA(morphogen, 0.253, 1e-2);
-                    //         }
-                    //         else
-                    //         {
-                    //             TS_ASSERT_DELTA(morphogen, 0.5781, 1e-2);
-                    //         }
-                    //     }
-                    // }
-
                     // Reset for next pde
                     SimulationTime::Instance()->Destroy();
                     SimulationTime::Instance()->SetStartTime(0.0);
@@ -398,120 +354,6 @@ public:
             }
         }
     }
-    
-    // /* 
-    //  * Now test the solutions are the same (as expected) for Uniform uptake (i.e only constant and linear term)
-    //  * on a growing tissue
-    //  *  
-    //  * Maybe With an apoptotic region? 
-    //  * 
-    //  * du/dt = D Grad.(Grad u) + au + b; 
-    //  * 
-    //  * Tissue growing at drdt = alpha r (i.e growing radially)
-    //  * 
-    //  */
-    // void noTestParabolicPdesOnGrowingDomain()
-    // {
-    //     std::string base_type = "Parabolic/GrowingDiscTest/";
-
-    //     std::string domain_types[3] = {"GrowingDomain", "BoxDomain"};
-
-    //     std::string pde_types[2][3] = {{"UniformPde", "CellwisePde", "VolumeScaledCellwisePde"},
-    //                                    {"UniformPde", "AveragedPde", "VolumeScaledAveragedPde"}};
-        
-    //     for (unsigned domain_type_index = 0; domain_type_index != 2; domain_type_index++)
-    //     {
-    //         std::string domain_type = domain_types[domain_type_index];
-
-    //         for (unsigned pde_type_index = 0; pde_type_index != 1; pde_type_index++)
-    //         {
-    //             std::string pde_type = pde_types[domain_type_index][pde_type_index];
-
-    //             std::string output_dir = base_type + domain_type + "/" + pde_type;
-       
-    //             PRINT_VARIABLE(output_dir);
-
-    //             //TrianglesMeshReader<2,2> mesh_reader("mesh/test/data/disk_522_elements");
-    //             TrianglesMeshReader<2,2> mesh_reader("projects/MultiCellularPDEComparison/test/data/CircularMeshR5");
-    //             MutableMesh<2,2> mesh;
-    //             mesh.ConstructFromMeshReader(mesh_reader);
-    //             //mesh.Scale(M_TISSUE_RADIUS,M_TISSUE_RADIUS);
-    //             std::vector<CellPtr> cells;
-    //             GenerateCells(mesh,cells,1.0);
-    //             MeshBasedCellPopulation<2> cell_population(mesh, cells);
-
-    //             cell_population.AddCellWriter<CellIdWriter>();
-    //             cell_population.AddCellWriter<CellMutationStatesWriter>();
-    //             cell_population.SetWriteVtkAsPoints(true);
-    //             cell_population.AddPopulationWriter<VoronoiDataWriter>();
-
-    //             // bound poulation so finite areas for cell scaling
-    //             cell_population.SetBoundVoronoiTessellation(true);
-
-    //             OffLatticeSimulation<2> simulator(cell_population);
-    //             simulator.SetOutputDirectory(output_dir);
-    //             simulator.SetDt(M_DT);
-    //             simulator.SetSamplingTimestepMultiple(M_SAMPLING_MULTIPLE);
-    //             simulator.SetEndTime(M_TIME_FOR_SIMULATION);
-
-                    
-    //             MAKE_PTR(VolumeTrackingModifier<2>, p_modifier);
-    //             simulator.AddSimulationModifier(p_modifier);
-
-    //             // Use a force to make the domain grow
-    //             MAKE_PTR(RadialGrowthForce<2>, p_growth_force);
-    //             simulator.AddForce(p_growth_force);
-
-    //             // Create PDE 
-    //             boost::shared_ptr<AbstractLinearPde<2,2> > p_pde = MakePde(cell_population, pde_type);
-
-    //             // create boundary condition
-    //             MAKE_PTR_ARGS(ConstBoundaryCondition<2>, p_bc, (M_BOUNDARY_CONDITION));
-    
-    //             // Create a PDE modifier and set the name of the dependent variable in the PDE
-    //             if (domain_type.compare("GrowingDomain")==0) //Growing Domain
-    //             {
-    //                 bool is_neuman_bcs = false;
-    //                 MAKE_PTR_ARGS(ParabolicGrowingDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, is_neuman_bcs));
-    //                 p_pde_modifier->SetDependentVariableName("morphogen");
-    //                 simulator.AddSimulationModifier(p_pde_modifier);
-    //             }
-    //             else // Box domain
-    //             {
-    //                 assert(domain_type.compare("BoxDomain")==0);
-                
-    //                 // Create a ChasteCuboid on which to base the finite element mesh used to solve the PDE
-    //                 ChastePoint<2> lower(-10, -10);
-    //                 ChastePoint<2> upper(10, 10);
-    //                 MAKE_PTR_ARGS(ChasteCuboid<2>, p_cuboid, (lower, upper));
-
-    //                 // Create a PDE modifier and set the name of the dependent variable in the PDE
-    //                 bool is_neuman_bcs = false;
-    //                 MAKE_PTR_ARGS(ParabolicBoxDomainPdeModifier<2>, p_pde_modifier, (p_pde, p_bc, is_neuman_bcs, p_cuboid, M_BOX_H));
-                    
-    //                 //p_pde_modifier->SetSolutionMovingWithCells(true);
-    //                 p_pde_modifier->SetDependentVariableName("morphogen");
-
-    //                 // Set the BSC on the elements that don't contain Cells.
-    //                 p_pde_modifier->SetBcsOnBoxBoundary(false);
-    //                 p_pde_modifier->SetBcsOnBoundingSphere(true);
-
-    //                 simulator.AddSimulationModifier(p_pde_modifier);
-    //             }
-
-    //             // Add data writer to output oxygen to a file for simple comparison
-    //             boost::shared_ptr<CellDataItemWriter<2,2> > p_cell_data_item_writer(new CellDataItemWriter<2,2>("morphogen"));
-    //             cell_population.AddCellWriter(p_cell_data_item_writer);
-
-    //             simulator.Solve();
-
-    //             // Reset for next pde
-    //             SimulationTime::Instance()->Destroy();
-    //             SimulationTime::Instance()->SetStartTime(0.0);
-    //         }
-    //     }
-    // }
-
 };
 
 #endif /*TESTPARABOLICPDECOMPARISION*/
