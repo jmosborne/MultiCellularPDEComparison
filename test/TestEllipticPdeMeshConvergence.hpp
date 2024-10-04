@@ -33,8 +33,8 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#ifndef TESTELLIPTICPDECOMPARISION
-#define TESTELLIPTICPDECOMPARISION
+#ifndef TESTELLIPTICPDEMESHCONVERGENCE
+#define TESTELLIPTICPDEMESHCONVERGENCE
 
 #include <cxxtest/TestSuite.h>
 #include "AbstractCellBasedWithTimingsTestSuite.hpp"
@@ -88,7 +88,7 @@ static const double M_BOUNDARY_CONDITION = 1;
  
 
 
-class TestEllipticPdeComparison : public AbstractCellBasedWithTimingsTestSuite
+class TestEllipticPdeMeshConvergence : public AbstractCellBasedWithTimingsTestSuite
 {
 private:
 
@@ -332,7 +332,6 @@ public:
             }
         }
     }
-
 };
 
-#endif /*TESTELLIPTICPDECOMPARISION*/
+#endif /*TESTELLIPTICPDEMESHCONVERGENCE*/

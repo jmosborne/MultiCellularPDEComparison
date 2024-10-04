@@ -47,7 +47,6 @@ GrowingDiscGeometryBoundaryCondition<DIM>::GrowingDiscGeometryBoundaryCondition(
       mGrowthRate(growthRate)
 {
     assert(mRadiusOfSphere > 0.0);
-    assert(mMaximumDistance > 0.0);
 
     if (DIM == 1)
     {

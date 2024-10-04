@@ -82,7 +82,7 @@ static const double M_TIME_FOR_SIMULATION = 10;
 static const double M_TISSUE_RADIUS = 5; 
 static const double M_APOPTOTIC_RADIUS = 2;
 static const double M_BOX_HALF_WIDTH = 6;
-static const double M_GROWING_BOX_HALF_WIDTH = 21; 
+static const double M_GROWING_BOX_HALF_WIDTH = 12; 
 static const double M_BOX_H = 0.25;
 static const double M_CONSTANT_UPTAKE = 0.0; 
 static const double M_LINEAR_UPTAKE = -0.1; 
@@ -195,7 +195,7 @@ public:
      */
     void TestParabolicPdes()
     {
-        std::string base_type = "Parabolic/";
+        std::string base_type = "Parabolic";
         
         std::string tissue_types[3] = {"StaticDisc", "GrowingDisc", "ProliferatingDisc"};
 
@@ -213,11 +213,11 @@ public:
             {
                 std::string domain_type = domain_types[domain_type_index];
 
-                for (unsigned pde_type_index = 0; pde_type_index != 3; pde_type_index++)
+                for (unsigned pde_type_index = 0; pde_type_index != 1; pde_type_index++)
                 {
                     std::string pde_type = pde_types[domain_type_index][pde_type_index];
 
-                    std::string output_dir = base_type +tissue_type + "/" + domain_type + "/" + pde_type;
+                    std::string output_dir = base_type + "/" + tissue_type + "/" + domain_type + "/" + pde_type;
         
                     PRINT_VARIABLE(output_dir);
                     
@@ -329,14 +329,17 @@ public:
 
                         if (domain_type.compare("BoxDomainAdvection")==0)
                         {
-                            TRACE("BoxDomainAdvection - SetSolutionMovingWithCells")
+                            TRACE("BoxDomainAdvection - SetMoveSolutionWithCells")
                             // Uses interpolation between cells 
-                            p_pde_modifier->SetSolutionMovingWithCells(true);
+                            p_pde_modifier->SetMoveSolutionWithCells(true);
                         }   
 
                         // Set the BSC on the elements that don't contain Cells.
                         p_pde_modifier->SetBcsOnBoxBoundary(false);
                         p_pde_modifier->SetBcsOnBoundingSphere(true);
+
+                        // Average over all FE nodes within the coronoi region of the cell centers
+                        p_pde_modifier->SetUseVoronoiCellsForInterpolation(true);
 
                         simulator.AddSimulationModifier(p_pde_modifier);
                     }

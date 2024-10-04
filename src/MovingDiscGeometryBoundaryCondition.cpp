@@ -46,8 +46,7 @@ MovingDiscGeometryBoundaryCondition<DIM>::MovingDiscGeometryBoundaryCondition(Ab
       mRadiusOfSphere(radius)
 {
     assert(mRadiusOfSphere > 0.0);
-    assert(mMaximumDistance > 0.0);
-
+    
     if (DIM == 1)
     {
         EXCEPTION("This boundary condition is not implemented in 1D.");

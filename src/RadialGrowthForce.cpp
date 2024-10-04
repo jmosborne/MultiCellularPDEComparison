@@ -51,7 +51,7 @@ RadialGrowthForce<DIM>::~RadialGrowthForce()
 template<unsigned DIM>
 void RadialGrowthForce<DIM>::SetRadialVelocity(double radialVelocity)
 {
-    assert(newValue > 0.0);
+    assert(radialVelocity > 0.0);
     mRadialVelocity = radialVelocity;
 }
 
