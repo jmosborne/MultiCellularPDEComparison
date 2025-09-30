@@ -9,29 +9,41 @@ beta = -0.1;
 CL = 1.0;
 L0 = 5.0;
 
-plot_time_step = 31;
+plot_time_step = 11;
 
 addpath ../../Chaste/anim/matlab/
 
 % Dirs to load
 
-BaseType = 'Parabolic';
+BaseType = 'ParabolicBackUp';
 
 TissueTypes = {'StaticDisc','GrowingDisc','ProliferatingDisc'};
 
 DomainTypes = {'GrowingDomain', 'BoxDomain','BoxDomainAdvection'};
 
-PdeTypes = {'UniformPde', 'CellwisePde', 'VolumeScaledCellwisePde';
-            'UniformPde', 'AveragedPde', 'VolumeScaledAveragedPde';
-            'UniformPde', 'AveragedPde', 'VolumeScaledAveragedPde'};
+% PdeTypes = {'UniformPde', 'CellwisePde', 'VolumeScaledCellwisePde';
+%             'UniformPde', 'AveragedPde', 'VolumeScaledAveragedPde';
+%             'UniformPde', 'AveragedPde', 'VolumeScaledAveragedPde'};
+% 
+% colors = {'kd','rs','g^';
+%           'k*','rx','g+';
+%           'k.','r.','g.'}
+% 
+% legends = {'Grow Unif','Grow Cell','Grow Vol Cell';
+%            'Box Unif','Box Ave','Box Vol Ave';
+%            'Box Ad Unif','Box Ad Ave','Box Ad Vol Ave'};
 
-colors = {'kd','rs','g^';
-          'k*','rx','g+';
-          'k.','r.','g.'}
+PdeTypes = {'UniformPde', 'CellwisePde',;
+            'UniformPde', 'VolumeScaledAveragedPde';
+            'UniformPde', 'VolumeScaledAveragedPde'};
 
-legends = {'Grow Unif','Grow Cell','Grow Vol Cell';
-           'Box Unif','Box Ave','Box Vol Ave';
-           'Box Ad Unif','Box Ad Ave','Box Ad Vol Ave'};
+colors = {'kd','rs';
+          'k*','g+';
+          'k.','g.'}
+
+legends = {'Grow Unif','Grow Cell';
+           'Box Unif','Box Vol Ave';
+           'Box Ad Unif','Box Ad Vol Ave'};
 
 for TissueTypeIndex = 1:3 %3
     TissueType = TissueTypes{TissueTypeIndex};
@@ -43,7 +55,7 @@ for TissueTypeIndex = 1:3 %3
     for DomainTypeIndex = 1:3 %3
         DomainType = DomainTypes{DomainTypeIndex};
 
-        for PdeTypeIndex = 1:3 %3
+        for PdeTypeIndex = 1:2 %3
             PdeType = PdeTypes{DomainTypeIndex,PdeTypeIndex};
 
             dir = [BaseType, '/', TissueType, '/', DomainType, '/', PdeType]
@@ -107,7 +119,6 @@ for TissueTypeIndex = 1:3 %3
         end
     end
     title(TissueType)
-    legend(main_legend,'Location','northwest')
     SaveAsPngEpsAndFig(-1,['Figs/',BaseType,TissueType,'_no_exact'], 12, 7/5, 12);
 
     U = (max(r)-L0)/end_time;
@@ -126,13 +137,16 @@ for TissueTypeIndex = 1:3 %3
     plot(x*L,u(end,:),'m--')
     plot(x*L,advection_u(end,:),'b--')
    
+    SaveAsPngEpsAndFig(-1,['Figs/',BaseType,TissueType,'_no_legend'], 12, 7/5, 12);
+
+
     main_legend{next_index} = 'Exact';
     main_legend{next_index+1} = 'Advec Exact';
-    legend(main_legend,'Location','westoutside')
+    legend(main_legend,'Location','northwest')
     
    
-    %xlim([0,10])
-    %ylim([0.0,1.1])
+    xlim([0,L])
+    ylim([0.2,1.0])
 
     % SaveAsPngEpsAndFig(-1,['Figs/',BaseType,TissueType], 7, 7/5, 9);
     SaveAsPngEpsAndFig(-1,['Figs/',BaseType,TissueType], 12, 7/5, 12);
